@@ -1,0 +1,26 @@
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:FindFirstChild("HumanoidRootPart")
+
+  _G.Autofarm = true
+  
+while _G.Autofarm do
+    wait(0.1) --쿨타임
+    -- 코인이 들어있는 폴더 탐색
+if workspace.Game:FindFirstChild("Coins") then
+    for i, v in pairs(workspace.Game.Coins:GetChildren()) do
+        -- v가 파트인지 확인하고, 투명도가 0(진짜)인 경우에만 실행
+        if v:IsA("BasePart") and v.Transparency == 0 then -- 가짜 코인 있음 worldmodel 그것 땜에 transparency 로 체킹
+            
+            -- 터치 이벤트 발생 (시작)
+            firetouchinterest(v, hrp, 0) --로컬님 참고해서 firetouchinterest 썻습니다
+            task.wait(0.05) -- 너무 빠르면 킥당할 수 있어 약간의 대기시간 추가
+            -- 터치 이벤트 발생 (종료)
+            firetouchinterest(v, hrp, 1)
+            
+        end
+    end
+else
+    warn("Coins 폴더를 찾을 수 없습니다.")
+end
+end
