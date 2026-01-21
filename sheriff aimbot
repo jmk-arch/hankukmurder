@@ -1,0 +1,65 @@
+            local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+local IsLockEnabled = false -- 락온 활성화 여부
+local PredictionValue = 0.15634 -- 탄속 예측값
+local TargetPart = nil -- 현재 고정된 타겟 파트
+
+-- 인벤토리에 특정 아이템이 있는지 확인하는 함수
+local function HasItem(player, itemName)
+    -- 등 뒤에 메고 있거나 손에 들고 있는 경우 (Character)
+    if player.Character and player.Character:FindFirstChild(itemName) then
+        return true
+    end
+    -- 가방 안에 있는 경우 (Backpack)
+    if player:FindFirstChild("Backpack") and player.Backpack:FindFirstChild(itemName) then
+        return true
+    end
+    return false
+end
+
+-- 가장 가까우면서 Revolver를 가진 적을 찾는 함수
+function FindTarget()
+    local MaxDistance = math.huge
+    local NearestEnemy = nil
+
+    for _, Player in pairs(Players:GetPlayers()) do
+        if Player ~= LocalPlayer then
+            local Character = Player.Character
+            
+            -- 1. 살아있는지 확인
+            if Character and Character:FindFirstChild("Humanoid") and Character.Humanoid.Health > 0 then
+                -- 2. "Revolver"를 가지고 있는지 확인 (이 조건이 핵심)
+                if HasItem(Player, "Knife") then
+                    local RootPart = Character:FindFirstChild("HumanoidRootPart")
+                    if RootPart then
+                        -- 3. 화면 안에 있는지 확인
+                        local ScreenPos, OnScreen = workspace.CurrentCamera:WorldToViewportPoint(RootPart.Position)
+                        
+                        if OnScreen then
+                            -- 4. 마우스와 가장 가까운 적 계산
+                            local Distance = (Vector2.new(Mouse.X, Mouse.Y) - Vector2.new(ScreenPos.X, ScreenPos.Y)).Magnitude
+                            if Distance < MaxDistance then
+                                NearestEnemy = RootPart
+                                MaxDistance = Distance
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return NearestEnemy
+end
+
+-- 카메라 고정 로직 (매 프레임 실행)
+RunService.Heartbeat:Connect(function()
+    if IsLockEnabled and TargetPart then
+        local Camera = workspace.CurrentCamera
+        -- 예측 사격: 타겟의 위치 + (속도 * 예측값)
+        local PredictedPosition = TargetPart.Position + (TargetPart.Velocity * PredictionValue)
+        Camera.CFrame = CFrame.new(Camera.CFrame.Position, PredictedPosition)
+    end
+end)
