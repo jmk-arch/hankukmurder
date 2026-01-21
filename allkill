@@ -1,0 +1,27 @@
+            local player = game.Players.LocalPlayer
+local backpack = player:WaitForChild("Backpack")
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+
+-- Knife 찾기
+local knife = backpack:FindFirstChild("Knife")
+
+if knife then
+    -- Humanoid의 EquipTool 메소드를 사용하는 것이 가장 안정적입니다.
+    humanoid:EquipTool(knife)
+    print("Knife를 장착했습니다!")
+else
+    print("인벤토리에 Knife가 없습니다.")
+end
+for i = 1, 3 do
+    game:GetService("Players").LocalPlayer.Character:WaitForChild("Knife"):WaitForChild("RequestStab"):FireServer()
+end
+
+for _, p in pairs(game:GetService("Players"):GetPlayers()) do
+    if p ~= game:GetService("Players").LocalPlayer and p.Character then
+        local hum = p.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            game:GetService("Players").LocalPlayer.Character:WaitForChild("Knife"):WaitForChild("RequestHit"):FireServer(hum)
+        end
+    end
+end
