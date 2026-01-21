@@ -63,3 +63,4 @@ RunService.Heartbeat:Connect(function()
         Camera.CFrame = CFrame.new(Camera.CFrame.Position, PredictedPosition)
     end
 end)
+-- 뚜또리알 IsLockEnabled = true 이렇게 하면 키는거 IsLockEnabled = false 이렇게 하면 끄는거
