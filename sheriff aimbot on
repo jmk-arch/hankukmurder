@@ -3,7 +3,7 @@ local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 
-local IsLockEnabled = false -- 락온 활성화 여부
+local IsLockEnabled = true -- 락온 활성화 여부
 local PredictionValue = 0.15634 -- 탄속 예측값
 local TargetPart = nil -- 현재 고정된 타겟 파트
 
