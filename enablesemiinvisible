@@ -1,0 +1,334 @@
+local connections = {
+    SemiInvisible = {},
+}
+
+local isInvisible = false
+local isBypassing = false
+local isTransitioning = false
+local clone, oldRoot, hip, connection
+local uiConnection -- UI 감지 연결
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+
+-----------------------------------------------------------
+-- 1. 핵심 기능 함수 (투명화 및 캐릭터 복구)
+-----------------------------------------------------------
+local function semiInvisibleFunction()
+    if isTransitioning then
+        warn("전환 중입니다. 잠시 후 다시 시도하세요.")
+        return false
+    end
+    
+    isTransitioning = true
+    local TINY_SIZE = Vector3.new(0.5, 0.5, 0.5) 
+
+    local function removeFolders()  
+        local playerFolder = Workspace:FindFirstChild(LocalPlayer.Name)  
+        if not playerFolder then return end  
+        local names = {"DoubleRig", "Constraints"}
+        for _, name in ipairs(names) do
+            local obj = playerFolder:FindFirstChild(name)
+            if obj then obj:Destroy() end
+        end
+    end  
+
+    local function doClone()  
+        local char = LocalPlayer.Character
+        if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then  
+            return false
+        end
+        
+        hip = char.Humanoid.HipHeight  
+        oldRoot = char:FindFirstChild("HumanoidRootPart")  
+        if not oldRoot then return false end  
+
+        local tempParent = Instance.new("Model", game)  
+        char.Parent = tempParent  
+
+        clone = oldRoot:Clone()  
+        clone.Size = TINY_SIZE 
+        clone.Transparency = 1 
+        clone.CanCollide = false
+        clone.Parent = char  
+        
+        oldRoot.Parent = Workspace.CurrentCamera 
+        oldRoot.CanCollide = false
+        clone.CFrame = oldRoot.CFrame  
+
+        char.PrimaryPart = clone  
+        char.Parent = Workspace  
+
+        for _, v in pairs(char:GetDescendants()) do  
+            if v:IsA("Weld") or v:IsA("Motor6D") then  
+                if v.Part0 == oldRoot then v.Part0 = clone end  
+                if v.Part1 == oldRoot then v.Part1 = clone end  
+            end  
+        end  
+        tempParent:Destroy()  
+        
+        task.wait(0.1)
+        return true  
+    end  
+
+    local function revertClone()  
+        if not oldRoot or not LocalPlayer.Character then 
+            isTransitioning = false
+            return false
+        end
+        
+        local char = LocalPlayer.Character
+        local tempParent = Instance.new("Model", game)  
+        char.Parent = tempParent  
+
+        oldRoot.Parent = char  
+        char.PrimaryPart = oldRoot  
+        char.Parent = Workspace  
+
+        for _, v in pairs(char:GetDescendants()) do  
+            if v:IsA("Weld") or v:IsA("Motor6D") then  
+                if v.Part0 == clone then v.Part0 = oldRoot end  
+                if v.Part1 == clone then v.Part1 = oldRoot end  
+            end  
+        end  
+
+        if clone then  
+            local oldPos = clone.CFrame  
+            clone:Destroy()  
+            clone = nil  
+            oldRoot.CFrame = oldPos  
+        end  
+        
+        oldRoot.CanCollide = true
+        oldRoot = nil  
+        if char:FindFirstChild("Humanoid") then 
+            char.Humanoid.HipHeight = hip 
+        end  
+        tempParent:Destroy()
+        
+        task.wait(0.1)
+        return true
+    end  
+
+    local success = false
+    
+    if not isInvisible then
+        removeFolders()
+        if doClone() then
+            isInvisible = true
+            connection = RunService.Heartbeat:Connect(function()  
+                if oldRoot and clone and oldRoot.Parent then  
+                    oldRoot.CFrame = clone.CFrame * CFrame.new(0, -500, 0)
+                    oldRoot.Velocity = Vector3.new(0, 0, 0)
+                    oldRoot.RotVelocity = Vector3.new(0, 0, 0)
+                    oldRoot.CanCollide = false
+                end  
+            end)
+            table.insert(connections.SemiInvisible, connection)
+            success = true
+        end
+    else
+        if connection then 
+            connection:Disconnect()
+            connection = nil
+        end
+        if revertClone() then
+            isInvisible = false
+            for _, conn in ipairs(connections.SemiInvisible) do 
+                if conn then conn:Disconnect() end 
+            end
+            connections.SemiInvisible = {}
+            success = true
+        end
+    end
+    
+    isTransitioning = false
+    return success
+end
+
+-----------------------------------------------------------
+-- 2. Namecall 후킹 및 실행 제어
+-----------------------------------------------------------
+local mt = getrawmetatable(game)
+local oldNamecall = mt.__namecall
+setreadonly(mt, false)
+
+mt.__namecall = newcclosure(function(self, ...)
+    local args = {...}
+    local method = getnamecallmethod()
+
+    if not checkcaller() and typeof(self) == "Instance" and (method == "FireServer" or method == "fireServer") then
+        if (self.Name == "RequestFire" or self.Name == "RequestThrow") and isInvisible and not isBypassing then
+            
+            isBypassing = true
+
+            task.spawn(function()
+                local targetCFrame = nil
+                local targetVelocity = Vector3.new(0, 0, 0)
+                
+                if clone and clone.Parent then
+                    targetCFrame = clone.CFrame
+                end
+                
+                local success = semiInvisibleFunction()
+                
+                if not success then
+                    isBypassing = false
+                    return
+                end
+                
+                local char = LocalPlayer.Character
+                local currentRoot = char and char:FindFirstChild("HumanoidRootPart")
+                
+                if currentRoot and targetCFrame then
+                    currentRoot.CFrame = targetCFrame
+                    currentRoot.Velocity = targetVelocity
+                    currentRoot.RotVelocity = Vector3.new(0, 0, 0)
+                end
+                
+                task.wait(0.2)
+                
+                pcall(function()
+                    self:FireServer(unpack(args))
+                end)
+                
+                task.wait(0.15)
+                
+                if not isInvisible then
+                    semiInvisibleFunction()
+                end
+                
+                isBypassing = false
+            end)
+
+            return
+        end
+    end
+    
+    return oldNamecall(self, ...)
+end)
+
+setreadonly(mt, true)
+
+-----------------------------------------------------------
+-- 3. UI 기반 자동 토글 시스템
+-----------------------------------------------------------
+local function setupUIMonitor()
+    local function getCoinUI()
+        local success, result = pcall(function()
+            return LocalPlayer.PlayerGui.MainUI.Round.Coin
+        end)
+        return success and result or nil
+    end
+    
+    local function checkAndToggle()
+        local coinUI = getCoinUI()
+        if not coinUI then return end
+        
+        -- Coin이 보이면 활성화, 안 보이면 비활성화
+        if coinUI.Visible and not isInvisible then
+            print("🟢 Coin UI 감지 - Semi-Invisible 활성화")
+            semiInvisibleFunction()
+        elseif not coinUI.Visible and isInvisible then
+            print("🔴 Coin UI 숨김 - Semi-Invisible 비활성화")
+            semiInvisibleFunction()
+        end
+    end
+    
+    -- 초기 상태 체크
+    task.wait(1)
+    local coinUI = getCoinUI()
+    
+    if coinUI then
+        -- Visible 속성 변경 감지
+        uiConnection = coinUI:GetPropertyChangedSignal("Visible"):Connect(checkAndToggle)
+        
+        -- 초기 상태 적용
+        checkAndToggle()
+        
+        print("✅ UI 자동 토글 시스템 활성화됨")
+    else
+        warn("⚠️ Coin UI를 찾을 수 없습니다.")
+    end
+end
+
+-----------------------------------------------------------
+-- 4. 안전 장치: 캐릭터 리스폰 및 사망 감지
+-----------------------------------------------------------
+local function onCharacterDeath()
+    if isInvisible then
+        print("⚠️ 사망 감지 - Semi-Invisible 비활성화 중...")
+        
+        if connection then connection:Disconnect() end
+        for _, conn in ipairs(connections.SemiInvisible) do
+            if conn then conn:Disconnect() end
+        end
+        connections.SemiInvisible = {}
+        isInvisible = false
+        isBypassing = false
+        isTransitioning = false
+        clone = nil
+        oldRoot = nil
+        
+        print("✅ Semi-Invisible이 안전하게 비활성화되었습니다.")
+    end
+end
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(0.5)
+    
+    local humanoid = char:WaitForChild("Humanoid", 5)
+    if humanoid then
+        humanoid.Died:Connect(onCharacterDeath)
+    end
+    
+    onCharacterDeath()
+    
+    -- UI 모니터 재설정
+    task.wait(1)
+    setupUIMonitor()
+end)
+
+-- 현재 캐릭터에도 사망 감지 추가
+if LocalPlayer.Character then
+    local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.Died:Connect(onCharacterDeath)
+    end
+end
+
+-----------------------------------------------------------
+-- 5. 기능 종료 함수 (전역)
+-----------------------------------------------------------
+_G.disableSemiInvisible = function()
+    if isInvisible then
+        semiInvisibleFunction()
+    end
+    
+    -- UI 연결 해제
+    if uiConnection then
+        uiConnection:Disconnect()
+        uiConnection = nil
+    end
+    
+    for _, conn in ipairs(connections.SemiInvisible) do
+        if conn then conn:Disconnect() end
+    end
+    connections.SemiInvisible = {}
+    isBypassing = false
+    isTransitioning = false
+    clone = nil
+    oldRoot = nil
+    print("✅ Semi-Invisible 기능이 완전히 종료되었습니다.")
+end
+
+_G.toggleSemiInvisible = function()
+    return semiInvisibleFunction()
+end
+
+-----------------------------------------------------------
+-- 6. 초기 실행
+-----------------------------------------------------------
+setupUIMonitor()
