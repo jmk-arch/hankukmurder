@@ -1,0 +1,30 @@
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+
+-- 게임 폴더 참조
+local gameFolder = workspace:WaitForChild("Game")
+local coinsFolder = gameFolder:WaitForChild("Coins")
+
+while false do
+    -- 코인 폴더 안에 자식이 있는지 확인
+    local coins = coinsFolder:GetChildren()
+    
+    if #coins == 0 then
+        -- 코인이 하나도 없다면 새로운 코인이 추가될 때까지 대기
+        print("코인이 없습니다. 새로 생길 때까지 대기 중...")
+        coinsFolder.ChildAdded:Wait() 
+    else
+        -- 코인이 있다면 반복문 실행
+        for _, v in pairs(coins) do
+            if v:IsA("BasePart") and v.Transparency == 0 then
+                -- 터치 이벤트 발생
+                firetouchinterest(v, hrp, 0)
+                task.wait(0.01) -- 수집 속도 조절 (너무 빠르면 0.05로 변경)
+                firetouchinterest(v, hrp, 1)
+            end
+        end
+    end
+    
+    task.wait(0.1) -- 서버 부하를 줄이기 위한 최소한의 대기
+end
